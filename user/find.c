@@ -8,5 +8,4 @@ int main(int argc, char*argv[]){
     int ticks=atoi(argv[1]);
     sleep(ticks); 
     printf("(nothing happens for a little while)\n");
-    exit(0);
-}
+    exit(0);}
