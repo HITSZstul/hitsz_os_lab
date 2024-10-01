@@ -14,7 +14,7 @@ char *fmtname(char *path) {
 
   // Return blank-padded name.
   if (strlen(p) >= DIRSIZ) return p;
-  memmove(buf, p, strlen(p));
+  memmove(buf, p, strlen(p));//将p的值传给buf，并且未赋值的全部赋值为空格
   memset(buf + strlen(p), ' ', DIRSIZ - strlen(p));
   return buf;
 }
