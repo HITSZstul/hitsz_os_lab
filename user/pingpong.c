@@ -5,7 +5,7 @@ int main(int argc, char*argv[]){
         printf("pingpong needs one argument!\n"); 
         exit(-1);
     }
-    char buffer[64];
+    char buffer[64] = "0";
     int p[2];
     int pid=getpid();
     int status;
@@ -21,11 +21,12 @@ int main(int argc, char*argv[]){
         dup(p[0]);
         close(p[0]);
         read(p[0],buffer,sizeof(buffer));
-        printf("%d:receive ping from %s\n",getpid(),buffer);
+        int a = atoi(buffer);
+        printf("%d: received ping from pid %d\n",getpid(),a);
     }
     else{
         wait(&status);
-        printf("%d receive pong from %d",getpid(),pid);
+        printf("%d: received pong from pid %d\n",getpid(),pid);
         close(p[0]);
         close(p[1]);
     }
