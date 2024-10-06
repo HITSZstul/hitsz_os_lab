@@ -2,11 +2,7 @@
 #include "kernel/stat.h"
 #include "user/user.h"
 #include "kernel/fs.h"
-int strncmp(const char *p, const char *q, uint n) {
-  while (n > 0 && *p && *p == *q) n--, p++, q++;
-  if (n == 0) return 0;
-  return (uchar)*p - (uchar)*q;
-}
+
 char *fmtname(char *path) {
     static char buf[DIRSIZ + 1];
     char *p;
@@ -18,8 +14,8 @@ char *fmtname(char *path) {
 
     // Return blank-padded name.
     if (strlen(p) >= DIRSIZ) return p;
-    memmove(buf, p, strlen(p));//将p的值传给buf，并且未赋值的全部赋值为空格
-    memset(buf + strlen(p), ' ', DIRSIZ - strlen(p));
+    memmove(buf, p, strlen(p));//将p的值传给buf，并且未赋值的全部赋值为"\0",方便后续的比较操作
+    memset(buf + strlen(p), '\0', DIRSIZ - strlen(p));
     return buf;
 }
 
@@ -43,7 +39,7 @@ void find(char* path,char* name){
         case T_FILE:
             char* file_name;
             file_name = fmtname(path);
-            if(strncmp(file_name,name,strlen(name))==0){
+            if(strcmp(file_name,name)){
                 printf("%s\n",name);
             }
             break;
@@ -55,36 +51,24 @@ void find(char* path,char* name){
             strcpy(buf, path);
             p = buf + strlen(buf);
             *p++ = '/';
-            // printf("%s\n",buf);
             while (read(fd, &de, sizeof(de)) == sizeof(de)) {
                 if (de.inum == 0) continue;
                 memmove(p, de.name, DIRSIZ);
                 p[DIRSIZ] = 0;
                 if (stat(buf, &st) < 0) {
-                    printf("ls: cannot stat %s\n", buf);
+                    printf("find: cannot stat %s\n", buf);
                     continue;
                 }
                 char* file_name = fmtname(buf);
-                
-                printf("path = %s\t",path);
-                // if(strncmp(path,".",strlen(path))!=0){
-                //     
-                printf("file_name = %s\n",file_name);
-                // }
-                if(strncmp(file_name,".",1)==0){
+                if(strcmp(file_name,".")==0||strcmp(file_name,"..")==0){
                     continue;
                 }
-                // printf("%d\n",st.type);
-                // printf("%s\t",file_name);
-                // printf("buff = %s\n",buf);
                 if(st.type==T_DIR){
                     find(buf,name);
                 }
-                // printf("filename = %s,name = %s\n",file_name,name);
-                if(strncmp(fmtname(buf),name,strlen(name))==0){
+                if(strcmp(fmtname(buf),name)==0){
                     printf("%s\n",buf);
                 }
-                // printf("%s %d %d %d\n", fmtname(buf), st.type, st.ino, st.size);
             }
         break;
         close(fd);
