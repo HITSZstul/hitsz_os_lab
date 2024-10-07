@@ -17,10 +17,11 @@ int main(int argc, char*argv[]){
         printf("CREATR CHILD PROCCESS ERROR!");
     }
     if(pid==0){
-        close(0);
-        dup(p[0]);
-        close(p[0]);
-        read(p[0],buffer,sizeof(buffer));
+        close(0);//关闭标准读取流std
+        dup(p[0]);//复制读取管道地址
+        //dup 系统调用的主要作用是创建一个新的文件描述符，该描述符引用与原文件描述符相同的打开文件。
+        close(p[0]);//将重复的管道关闭
+        read(0,buffer,sizeof(buffer));
         int a = atoi(buffer);
         printf("%d: received ping from pid %d\n",getpid(),a);
     }
