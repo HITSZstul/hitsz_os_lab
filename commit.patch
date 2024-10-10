@@ -1,0 +1,243 @@
+diff --git a/.vscode/launch.json b/.vscode/launch.json
+new file mode 100644
+index 0000000..c0638b5
+--- /dev/null
++++ b/.vscode/launch.json
+@@ -0,0 +1,18 @@
++{
++    "version": "0.2.0",
++    "configurations": [
++        {
++            "type": "gdb",
++            "request": "attach",
++            "name": "Attach to gdbserver",
++            "executable": "${workspaceRoot}/kernel/kernel",
++            "gdbpath": "gdb-multiarch",
++            "remote": true,            
++            "target": "127.0.0.1:27235",
++            "cwd": "${workspaceRoot}",
++            "setupCommands": {
++                "text": "source ${workspaceFolder}/.gdbinit"
++            }
++        }
++    ]
++}
+\ No newline at end of file
+diff --git a/Makefile b/Makefile
+index b971308..1f68a81 100644
+--- a/Makefile
++++ b/Makefile
+@@ -157,6 +157,9 @@ UPROGS=\
+ 	$U/_grind\
+ 	$U/_wc\
+ 	$U/_zombie\
++	$U/_sleep\
++	$U/_pingpong\
++	$U/_find\
+ 
+ 
+ ifeq ($(LAB),syscall)
+@@ -242,15 +245,8 @@ qemu-gdb: $K/kernel .gdbinit fs.img
+ 	@echo "*** Now run 'gdb' in another window." 1>&2
+ 	$(QEMU) $(QEMUOPTS) -S $(QEMUGDB)
+ 
+-GDBARGS = 
+-GDBARGS += -ex 'set architecture riscv:rv64'
+-GDBARGS += -ex 'target remote 127.0.0.1:$(GDBPORT)'
+-GDBARGS += -ex 'symbol-file kernel/kernel'
+-GDBARGS += -ex 'set riscv use-compressed-breakpoints yes'
+-
+-
+ gdb: 
+-	$(GDB) $(GDBARGS)
++	$(GDB)
+ 
+ ##
+ ##  FOR testing lab grading script
+diff --git a/commands.gdb b/commands.gdb
+new file mode 100644
+index 0000000..be1ceb0
+--- /dev/null
++++ b/commands.gdb
+@@ -0,0 +1,6 @@
++b usertrap
++continue
++p cpus[$tp]->proc->name
++continue
++p cpus[$tp]->proc->name
++da
+\ No newline at end of file
+diff --git a/name b/name
+new file mode 100644
+index 0000000..e69de29
+diff --git a/state b/state
+new file mode 100644
+index 0000000..e69de29
+diff --git a/user/find.c b/user/find.c
+new file mode 100644
+index 0000000..325a4d6
+--- /dev/null
++++ b/user/find.c
+@@ -0,0 +1,87 @@
++#include "kernel/types.h"
++#include "kernel/stat.h"
++#include "user/user.h"
++#include "kernel/fs.h"
++
++char *fmtname(char *path) {
++    static char buf[DIRSIZ + 1];
++    char *p;
++
++    // Find first character after last slash.
++    for (p = path + strlen(path); p >= path && *p != '/'; p--)
++    ;
++    p++;
++
++    // Return blank-padded name.
++    if (strlen(p) >= DIRSIZ) return p;
++    memmove(buf, p, strlen(p));//将p的值传给buf，并且未赋值的全部赋值为"\0",方便后续的比较操作
++    memset(buf + strlen(p), '\0', DIRSIZ - strlen(p));
++    return buf;
++}
++
++void find(char* path,char* name){
++    char buf[512], *p;
++    int fd;
++    struct dirent de;
++    struct stat st;
++
++    if ((fd = open(path, 0)) < 0) {
++        fprintf(2, "ls: cannot open %s\n", path);
++        return;
++    }
++    
++    if (fstat(fd, &st) < 0) {
++        fprintf(2, "ls: cannot stat %s\n", path);
++        close(fd);
++        return;
++    }
++    switch(st.type){
++        case T_FILE:
++            char* file_name;
++            file_name = fmtname(path);
++            if(strcmp(file_name,name)){
++                printf("%s\n",name);
++            }
++            break;
++        case T_DIR:
++            if (strlen(path) + 1 + DIRSIZ + 1 > sizeof buf) {
++                printf("ls: path too long\n");
++                break;
++            }
++            strcpy(buf, path);
++            p = buf + strlen(buf);
++            *p++ = '/';
++            while (read(fd, &de, sizeof(de)) == sizeof(de)) {
++                if (de.inum == 0) continue;
++                memmove(p, de.name, DIRSIZ);
++                p[DIRSIZ] = 0;
++                if (stat(buf, &st) < 0) {
++                    printf("find: cannot stat %s\n", buf);
++                    continue;
++                }
++                char* file_name = fmtname(buf);
++                if(strcmp(file_name,".")==0||strcmp(file_name,"..")==0){
++                    continue;
++                }
++                if(st.type==T_DIR){
++                    find(buf,name);
++                }
++                if(strcmp(fmtname(buf),name)==0){
++                    printf("%s\n",buf);
++                }
++            }
++        break;
++        close(fd);
++    }
++}
++int main(int argc, char*argv[]){
++    if(argc != 3){
++        printf("Find needs three argument!\n"); 
++        exit(-1);
++    }
++    for(int i=1;i<argc-1;i++){
++        // argv[argc-1] is the target
++        find(argv[i],argv[argc-1]);
++    }
++    exit(0);
++}
+\ No newline at end of file
+diff --git a/user/ls.c b/user/ls.c
+index dca754a..1b042f8 100644
+--- a/user/ls.c
++++ b/user/ls.c
+@@ -14,7 +14,7 @@ char *fmtname(char *path) {
+ 
+   // Return blank-padded name.
+   if (strlen(p) >= DIRSIZ) return p;
+-  memmove(buf, p, strlen(p));
++  memmove(buf, p, strlen(p));//将p的值传给buf，并且未赋值的全部赋值为空格
+   memset(buf + strlen(p), ' ', DIRSIZ - strlen(p));
+   return buf;
+ }
+diff --git a/user/pingpong.c b/user/pingpong.c
+new file mode 100644
+index 0000000..703f33b
+--- /dev/null
++++ b/user/pingpong.c
+@@ -0,0 +1,35 @@
++#include"kernel/types.h"
++#include"user.h"
++int main(int argc, char*argv[]){
++    if(argc != 1){
++        printf("pingpong needs one argument!\n"); 
++        exit(-1);
++    }
++    char buffer[64] = "0";
++    int p[2];
++    int pid=getpid();
++    int status;
++    pipe(p);
++    itoa(pid,buffer);
++    write(p[1],buffer,sizeof(buffer));
++
++    if((pid = fork())<0){
++        printf("CREATR CHILD PROCCESS ERROR!");
++    }
++    if(pid==0){
++        close(0);//关闭标准读取流std
++        dup(p[0]);//复制读取管道地址
++        //dup 系统调用的主要作用是创建一个新的文件描述符，该描述符引用与原文件描述符相同的打开文件。
++        close(p[0]);//将重复的管道关闭
++        read(0,buffer,sizeof(buffer));
++        int a = atoi(buffer);
++        printf("%d: received ping from pid %d\n",getpid(),a);
++    }
++    else{
++        wait(&status);
++        printf("%d: received pong from pid %d\n",getpid(),pid);
++        close(p[0]);
++        close(p[1]);
++    }
++    exit(0);
++}
+\ No newline at end of file
+diff --git a/user/sleep.c b/user/sleep.c
+new file mode 100644
+index 0000000..95e2239
+--- /dev/null
++++ b/user/sleep.c
+@@ -0,0 +1,12 @@
++#include"kernel/types.h"
++#include"user.h"
++int main(int argc, char*argv[]){
++    if(argc != 2){
++        printf("Sleep needs one argument!\n"); 
++        exit(-1);
++    }
++    int ticks=atoi(argv[1]);
++    sleep(ticks); 
++    printf("(nothing happens for a little while)\n");
++    exit(0);
++}
+\ No newline at end of file

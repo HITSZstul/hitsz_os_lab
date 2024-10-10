@@ -36,7 +36,7 @@ void find(char* path,char* name){
         return;
     }
     switch(st.type){
-        case T_FILE:
+        case T_FILE: //判断当前文件是否为目标文件
             char* file_name;
             file_name = fmtname(path);
             if(strcmp(file_name,name)){
@@ -50,7 +50,7 @@ void find(char* path,char* name){
             }
             strcpy(buf, path);
             p = buf + strlen(buf);
-            *p++ = '/';
+            *p++ = '/';//复制文件路径并一一查找目录下的所有文件或目录
             while (read(fd, &de, sizeof(de)) == sizeof(de)) {
                 if (de.inum == 0) continue;
                 memmove(p, de.name, DIRSIZ);
