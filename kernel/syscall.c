@@ -89,6 +89,7 @@ extern uint64 sys_wait(void);
 extern uint64 sys_write(void);
 extern uint64 sys_uptime(void);
 extern uint64 sys_rename(void);
+extern uint64 sys_yield(void);
 
 static uint64 (*syscalls[])(void) = {
     [SYS_fork] sys_fork,   [SYS_exit] sys_exit,     [SYS_wait] sys_wait,     [SYS_pipe] sys_pipe,
@@ -96,8 +97,11 @@ static uint64 (*syscalls[])(void) = {
     [SYS_chdir] sys_chdir, [SYS_dup] sys_dup,       [SYS_getpid] sys_getpid, [SYS_sbrk] sys_sbrk,
     [SYS_sleep] sys_sleep, [SYS_uptime] sys_uptime, [SYS_open] sys_open,     [SYS_write] sys_write,
     [SYS_mknod] sys_mknod, [SYS_unlink] sys_unlink, [SYS_link] sys_link,     [SYS_mkdir] sys_mkdir,
-    [SYS_close] sys_close, [SYS_rename] sys_rename,
+    [SYS_close] sys_close, [SYS_rename] sys_rename, [SYS_yield] sys_yield,
 };
+/* 将这些函数的指针都放在统一的数组里，并且数组下标就是系统调用号，这样我们在分辨不同
+系统调用的时候就可以很方便地用数组来进行操作了。kernel/syscall.c中的 syscall() 函数
+就根据这一方法实现了系统调用的分发（通过不同系统调用号调用不同系统调用函数） */
 
 void syscall(void) {
   int num;
