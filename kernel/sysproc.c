@@ -20,9 +20,9 @@ uint64 sys_fork(void) { return fork(); }
 
 uint64 sys_wait(void) {
   uint64 p;
-  uint64 p1;
+  int p1;
   if (argaddr(0, &p) < 0) return -1;
-  if (argaddr(1, &p1) < 0) return -1;
+  if (argint(1, &p1) < 0) return -1;
   return wait(p,p1);
 }
 

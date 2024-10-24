@@ -347,18 +347,8 @@ void exit(int status) {
   struct proc *pp;
   int i = 0;
   for (pp = proc; pp < &proc[NPROC]; pp++) {
-    // this code uses pp->parent without holding pp->lock.
-    // acquiring the lock first could cause a deadlock
-    // if pp or a child of pp were also in exit()
-    // and about to try to lock p.
     if (pp->parent == p) {
-      // pp->parent can't change between the check and the acquire()
-      // because only the parent changes it, and we're the parent.
       exit_info("proc %d exit, child %d, pid %d, name %s, state %s\n", p->pid,i++, pp->pid, pp->name, states[pp->state]);
-      // we should wake up init here, but that would require
-      // initproc->lock, which would be a deadlock, since we hold
-      // the lock on one of init's children (pp). this is why
-      // exit() always wakes init (before acquiring any locks).
     }
   }
   // Give any children to init.
@@ -380,7 +370,7 @@ void exit(int status) {
 
 // Wait for a child process to exit and return its pid.
 // Return -1 if this process has no children.
-int wait(uint64 addr,uint64 flags) {
+int wait(uint64 addr,int flags) {
   struct proc *np;
   int havekids, pid;
   struct proc *p = myproc();
