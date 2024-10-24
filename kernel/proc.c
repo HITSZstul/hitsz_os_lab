@@ -511,9 +511,11 @@ void yield(void) {
 void sys_yield(void){
   struct proc *p = myproc();
   int size = sizeof(p->context);
-  void *end_address = (char *)&p->context + size;
+  void *end_address = (char *)&p->context + size;//使用char类型，保证计算是单个字节计算
   printf("Save the context of the process to the memory region from address %p to %p\n", &p->context, end_address);
-  printf("Current running process pid is %d and user pc is %p\n", p->pid, p->trapframe->epc);
+  printf("Current running process pid is %d and user pc is %p\n", p->pid, p->trapframe->epc);/* 当进程从用户态陷入内核时，
+  由于内核态也需要用到寄存器，因此需要将用户态的上下文（寄存器信息）保存起来，以便于后面返回用户态时重新恢复这些上下文（寄存器）。
+  其中的epc保存的就是用户态陷入内核时对应的PC值 */
   int found = 0;
   for (; p < &proc[NPROC]; p++) {
       acquire(&p->lock);
@@ -522,7 +524,7 @@ void sys_yield(void){
         found = 1;
       }
       release(&p->lock);
-      if(found==1){
+      if(found==1){//找到第一个准备运行的进程，将退出查找
         break;
       }
     }

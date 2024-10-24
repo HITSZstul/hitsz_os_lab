@@ -105,4 +105,4 @@ struct proc {
   struct inode *cwd;           // Current directory
   char name[16];               // Process name (debugging)
 };
-extern struct proc procs[NPROC];
+extern struct proc procs[NPROC];// 定义了一个保存所有进程的进程表
