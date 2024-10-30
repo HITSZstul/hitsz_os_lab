@@ -26,11 +26,6 @@
 struct {
   struct spinlock lock;
   struct buf buf[NBUF];
-
-  // Linked list of all buffers, through prev/next.
-  // Sorted by how recently the buffer was used.
-  // head.next is most recent, head.prev is least.
-  struct buf head;
 } bcache;
 
 void
@@ -39,16 +34,17 @@ binit(void)
   struct buf *b;
 
   initlock(&bcache.lock, "bcache");
-
+  uint init_time = ticks;
   // Create linked list of buffers
-  bcache.head.prev = &bcache.head;
-  bcache.head.next = &bcache.head;
+  // 变为单项链表
+  // bcache.head.prev = &bcache.head;
   for(b = bcache.buf; b < bcache.buf+NBUF; b++){
-    b->next = bcache.head.next;
-    b->prev = &bcache.head;
+    // b->next = bcache.head.next;
+    // b->prev = &bcache.head;
     initsleeplock(&b->lock, "buffer");
-    bcache.head.next->prev = b;
-    bcache.head.next = b;
+    b->timestamp = init_time;//初始化将所有的空闲buf时间设置为init_time
+    // bcache.head.next->prev = b;
+    // bcache.head.next = b;
   }
 }
 
@@ -60,30 +56,50 @@ bget(uint dev, uint blockno)
 {
   struct buf *b;
 
-  acquire(&bcache.lock);
-
   // Is the block already cached?
-  for(b = bcache.head.next; b != &bcache.head; b = b->next){
+  for(b = bcache.buf; b < bcache.buf+NBUF; b++){
     if(b->dev == dev && b->blockno == blockno){
-      b->refcnt++;
-      release(&bcache.lock);
       acquiresleep(&b->lock);
-      return b;
+      if(b->dev == dev && b->blockno == blockno){
+        b->refcnt++;
+        b->timestamp = ticks;
+        return b;
+      }
+      releasesleep(&b->lock);
     }
   }
 
   // Not cached.
   // Recycle the least recently used (LRU) unused buffer.
-  for(b = bcache.head.prev; b != &bcache.head; b = b->prev){
-    if(b->refcnt == 0) {
-      b->dev = dev;
-      b->blockno = blockno;
-      b->valid = 0;
-      b->refcnt = 1;
-      release(&bcache.lock);
-      acquiresleep(&b->lock);
-      return b;
+  //变为单向链表，向下一个查找
+  //查找时间最早的节点，将该节点抛弃
+  acquire(&bcache.lock);
+
+  uint earlier_time = ~0;//init
+  struct buf* earlier_buf = 0;
+
+  for(b = bcache.buf; b < bcache.buf+NBUF; b++){
+    if(b->refcnt == 0) {//找到空闲buf，记录一下其时间
+      // acquiresleep(&b->lock);
+      // printf("earlier_time = %d, b->timestamp = %d\n",earlier_time,b->timestamp);
+      if(earlier_time > b->timestamp){
+        // if(holdingsleep(&earlier_buf->lock)){
+          // releasesleep(&earlier_buf->lock);
+        // }
+        earlier_time = b->timestamp;
+        earlier_buf = b;//此时的earlier buf记录就是当前搜索的最早buf
+      }
     }
+  }
+  if(earlier_buf!=0){
+    earlier_buf->dev = dev;
+    earlier_buf->blockno = blockno;
+    earlier_buf->valid = 0;
+    earlier_buf->refcnt = 1;
+    earlier_buf->timestamp = ticks;
+    release(&bcache.lock);
+    acquiresleep(&earlier_buf->lock);
+    return earlier_buf;
   }
   panic("bget: no buffers");
 }
@@ -119,21 +135,12 @@ brelse(struct buf *b)
   if(!holdingsleep(&b->lock))
     panic("brelse");
 
-  releasesleep(&b->lock);
-
-  acquire(&bcache.lock);
-  b->refcnt--;
-  if (b->refcnt == 0) {
+  if (b->refcnt == 1) {
     // no one is waiting for it.
-    b->next->prev = b->prev;
-    b->prev->next = b->next;
-    b->next = bcache.head.next;
-    b->prev = &bcache.head;
-    bcache.head.next->prev = b;
-    bcache.head.next = b;
+    b->timestamp = ticks;//刚刚使用完毕，将时间戳设置为当前时间
   }
-  
-  release(&bcache.lock);
+  b->refcnt--;
+  releasesleep(&b->lock);
 }
 
 void
