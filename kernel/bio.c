@@ -90,12 +90,7 @@ bget(uint dev, uint blockno)
       release(&bcache.lock[getHash(blockno)]);
       // printf("命中！释放当前哈希桶%d的锁\n",getHash(blockno));
       acquiresleep(&b->lock);
-      if(b->dev == dev && b->blockno == blockno){
-        b->refcnt++;
-        b->timestamp = ticks;
-        return b;
-      }
-      releasesleep(&b->lock);
+      return b;
     }
   }
 
