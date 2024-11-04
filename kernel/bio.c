@@ -47,8 +47,6 @@ binit(void)
     initlock(&bcache.lock[i], "bcache_hash");
     bcache.hashbucket[i].next = &bcache.hashbucket[i];//初始化每个头节点
     bcache.hashbucket[i].prev = &bcache.hashbucket[i];
-    // printf("bcache.hashbucker[%d]的地址为%p\n",i,&bcache.hashbucket[i]);
-    
   }
   initlock(&bcache.global_lock, "bcache_global");
 
@@ -61,15 +59,7 @@ binit(void)
     bcache.hashbucket[getHash(num)].next->prev = b;
     bcache.hashbucket[getHash(num)].next = b;
     num++;
-    // printf("%d,%d\n",num,getHash(num));
   }//以单向链表的方式相连
-
-  // for(int i=0;i<NBUCKETS;i++){
-  //   for(b = bcache.hashbucket[i].next; b != &bcache.hashbucket[i]; b = b->next){
-  //     printf("发生了死循环？%d\n",i);
-  //   }
-  // }
-  
 }
 
 // Look through buffer cache for block on device dev.
@@ -79,12 +69,9 @@ static struct buf*
 bget(uint dev, uint blockno)
 {
   struct buf *b;
-  // printf("准备获取当前哈希桶%d的锁\n",getHash(blockno));
   acquire(&bcache.lock[getHash(blockno)]);//获取当前哈希桶的锁
-  // printf("获取当前哈希桶%d的锁\n",getHash(blockno));
   // Is the block already cached?
   for(b = bcache.hashbucket[getHash(blockno)].next; b != &bcache.hashbucket[getHash(blockno)]; b = b->next){
-    // printf("发生了死循环？");
     if(b->dev == dev && b->blockno == blockno){
       b->refcnt++;
       release(&bcache.lock[getHash(blockno)]);
@@ -93,7 +80,6 @@ bget(uint dev, uint blockno)
       return b;
     }
   }
-
   // Not cached.
   // Recycle the least recently used (LRU) unused buffer.
   // to steal from other 
@@ -119,7 +105,6 @@ bget(uint dev, uint blockno)
   // printf("准备获取当前全局锁\n");
   acquire(&bcache.global_lock);
   // printf("获取当前全局锁\n");
-
   for(int i = getHash(blockno+1);i != getHash(blockno);i = getHash(i+1)){
     // printf("没有获得空闲块，查看其他桶并准备获取其锁\n",i);
     acquire(&bcache.lock[i]);//查找这个桶是否有空闲
