@@ -379,3 +379,63 @@ int test_pagetable() {
   printf("test_pagetable: %d\n", satp != gsatp);
   return satp != gsatp;
 }
+
+
+
+void recursivePrint(pagetable_t pgtbl,int note, uint va){
+  for (int i = 0; i < 512; i++) {
+    pte_t pte = pgtbl[i];
+    //if is a pte print an recursive
+    if ((pte & PTE_V) && (pte & (PTE_R|PTE_W|PTE_X)) == 0) {
+      // this PTE points to a lower-level page table.
+      for(int i=0;i<note;i++){
+        printf("||  ");
+      }
+      uint64 child = PTE2PA(pte);
+      uint64 tempVa = va+i;
+      tempVa = tempVa<<9;
+      
+      printf("idx: %d: pa: %p, flags: %s\n",i,child,"----");
+      recursivePrint((pagetable_t)child, note+1,tempVa);
+
+    } else if (pte & PTE_V) {
+      //if is a leaf, get the pte from dir
+      for(int i=0;i<note;i++){
+        printf("||  ");
+      }
+      char flag[5];
+      if(pte&PTE_R){
+        flag[0] = 'r';
+      }else{
+        flag[0] = '-';
+      }
+      if(pte&PTE_W){
+        flag[1] = 'w';
+      }else{
+        flag[1] = '-';
+      }
+      if(pte&PTE_X){
+        flag[2] = 'x';
+      }else{
+        flag[2] = '-';
+      }
+      if(pte&PTE_U){
+        flag[3] = 'u';
+      }else{
+        flag[3] = '-';
+      }
+      flag[4] = '\0';
+      uint64 itsVa = va+i;
+      itsVa = itsVa<<12;
+      printf("idx: %d: va: %p -> pa: %p, flags: %s\n",i,itsVa,pte,flag);
+      // panic("freewalk: leaf");
+    }
+  }
+}
+
+void vmprint(pagetable_t pgtbl){
+  //第一行打印的是 vmprint 的参数，即获得的页表参数具体的值。
+  printf("page table %p\n",pgtbl);
+  recursivePrint(pgtbl,1,0);
+}
+
