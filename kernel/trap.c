@@ -119,7 +119,6 @@ void kerneltrap() {
   uint64 sepc = r_sepc();
   uint64 sstatus = r_sstatus();
   uint64 scause = r_scause();
-
   if ((sstatus & SSTATUS_SPP) == 0) panic("kerneltrap: not from supervisor mode");
   if (intr_get() != 0) panic("kerneltrap: interrupts enabled");
 

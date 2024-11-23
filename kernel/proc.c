@@ -37,6 +37,7 @@ void procinit(void) {
     uint64 va = KSTACK((int)(p - proc));
     kvmmap(va, (uint64)pa, PGSIZE, PTE_R | PTE_W);
     p->kstack = va;
+    p->kstack_pa = (uint64)pa;
   }
   kvminithart();
 }
@@ -111,15 +112,37 @@ found:
     return 0;
   }
 
+  p->k_pagetable = kernelvminit();
+  if (p->k_pagetable == 0) {
+    freeproc(p);
+    release(&p->lock);
+    return 0;
+  }
+  kernelvmmap(p->kstack, p->kstack_pa, PGSIZE, PTE_R | PTE_W, p->k_pagetable);
+
   // Set up new context to start executing at forkret,
   // which returns to user space.
   memset(&p->context, 0, sizeof(p->context));
   p->context.ra = (uint64)forkret;
   p->context.sp = p->kstack + PGSIZE;
-
   return p;
 }
 
+void proc_freekpagetable(pagetable_t pagetable) {
+  // there are 2^9 = 512 PTEs in a page table.
+  for (int i = 0; i < 512; i++) {
+    pte_t pte = pagetable[i];
+    if ((pte & PTE_V) && (pte & (PTE_R | PTE_W | PTE_X)) == 0) {
+      // this PTE points to a lower-level page table.
+      uint64 child = PTE2PA(pte);
+      proc_freekpagetable((pagetable_t)child);
+      pagetable[i] = 0;
+    } else if (pte & PTE_V) {
+      pagetable[i] = 0;
+    }
+  }
+  kfree((void *)pagetable);
+}
 // free a proc structure and the data hanging from it,
 // including user pages.
 // p->lock must be held.
@@ -136,6 +159,15 @@ static void freeproc(struct proc *p) {
   p->killed = 0;
   p->xstate = 0;
   p->state = UNUSED;
+
+  pagetable_t pa = (pagetable_t)PTE2PA(p->k_pagetable[0]);
+  for (int i = 0; i < 0x60; i++) {
+    pa[i] = 0;
+  }
+
+  // 释放该进程的独立内核页表
+  if (p->k_pagetable) proc_freekpagetable(p->k_pagetable);
+  p->k_pagetable = 0;
 }
 
 // Create a user page table for a given process,
@@ -201,7 +233,7 @@ void userinit(void) {
   p->cwd = namei("/");
 
   p->state = RUNNABLE;
-
+  sync_pagetable(p);
   release(&p->lock);
 }
 
@@ -220,6 +252,8 @@ int growproc(int n) {
     sz = uvmdealloc(p->pagetable, sz, sz + n);
   }
   p->sz = sz;
+  sync_pagetable(p);
+  // vmprint(p->pagetable);
   return 0;
 }
 
@@ -261,7 +295,7 @@ int fork(void) {
   pid = np->pid;
 
   np->state = RUNNABLE;
-
+  sync_pagetable(np);
   release(&np->lock);
 
   return pid;
@@ -348,7 +382,6 @@ void exit(int status) {
   p->state = ZOMBIE;
 
   release(&original_parent->lock);
-
   // Jump into the scheduler, never to return.
   sched();
   panic("zombie exit");
@@ -430,7 +463,11 @@ void scheduler(void) {
         // before jumping back to us.
         p->state = RUNNING;
         c->proc = p;
+        w_satp(MAKE_SATP(p->k_pagetable));//把找到的proc的satp
+        sfence_vma();
         swtch(&c->context, &p->context);
+
+        kvminithart();
 
         // Process is done running for now.
         // It should have changed its p->state before coming back.
@@ -442,6 +479,7 @@ void scheduler(void) {
     }
 #if !defined(LAB_FS)
     if (found == 0) {
+      kvminithart();
       intr_on();
       asm volatile("wfi");
     }
@@ -468,6 +506,7 @@ void sched(void) {
   if (intr_get()) panic("sched interruptible");
 
   intena = mycpu()->intena;
+
   swtch(&p->context, &mycpu()->context);
   mycpu()->intena = intena;
 }
@@ -621,5 +660,17 @@ void procdump(void) {
       state = "???";
     printf("%d %s %s", p->pid, state, p->name);
     printf("\n");
+  }
+}
+// 将进程的用户页表，映射到内核页表中
+void sync_pagetable(struct proc* p){
+  //遍历用户次级页表
+  pte_t pte = p->pagetable[0];
+  pagetable_t child = (pagetable_t)PTE2PA(pte);
+  pte_t pte_k = p->k_pagetable[0];
+  pagetable_t child_k = (pagetable_t)PTE2PA(pte_k);
+
+  for(int i=0;i<96;i++){
+    child_k[i] = child[i];  
   }
 }

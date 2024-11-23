@@ -108,6 +108,7 @@ void            yield(void);
 int             either_copyout(int user_dst, uint64 dst, void *src, uint64 len);
 int             either_copyin(void *dst, int user_src, uint64 src, uint64 len);
 void            procdump(void);
+void            sync_pagetable(struct proc* p);
 
 // swtch.S
 void            swtch(struct context*, struct context*);
@@ -157,6 +158,10 @@ void            uartputc(int);
 void            uartputc_sync(int);
 int             uartgetc(void);
 
+//vmcopyin.c
+int             copyin_new(pagetable_t pagetable, char *dst, uint64 srcva, uint64 len);
+int             copyinstr_new(pagetable_t pagetable, char *dst, uint64 srcva, uint64 max);
+
 // vm.c
 void            kvminit(void);
 void            kvminithart(void);
@@ -180,6 +185,8 @@ int             copyin(pagetable_t, char *, uint64, uint64);
 int             copyinstr(pagetable_t, char *, uint64, uint64);
 int             test_pagetable();
 void            vmprint(pagetable_t pgtbl);
+pagetable_t     kernelvminit(void);
+void            kernelvmmap(uint64, uint64, uint64, int, pagetable_t);
 // plic.c
 void            plicinit(void);
 void            plicinithart(void);
